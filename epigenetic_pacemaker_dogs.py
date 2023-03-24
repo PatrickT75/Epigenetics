@@ -23,13 +23,10 @@ from matplotlib import rc
 from scipy import optimize
 import scipy.stats as stats
 
-"""## Data Cleanup"""
+#### Data Cleanup
 
 CG_table = pd.read_csv("methylation_used.csv", header=None)
 CG_table = CG_table.drop(columns = 0)
-# print("First shape: ", CG_table.shape)
-# print(CG_table)
-# CG_table_short = CG_table[91:]
 
 isna = CG_table.isna().any()
 ones = np.ones((CG_table.shape[1]))
@@ -39,17 +36,17 @@ keep = keep.astype(bool)
 
 CG_table = CG_table.dropna(axis = 'columns')
 
+
+#### Split features into dogs and wolves
 UCLA_CG_table = CG_table[0:147]
 Wolves_CG_table = CG_table[147:]
 
-print("Keep: ", len(keep), "\n", keep)
 
+#### Process traits
 traits_short = pd.read_csv("traits_used.csv", header=None)
 
 UCLA_traits = traits_short[0:147]
 Wolves_traits = traits_short[147:]
-
-print(UCLA_traits)
 
 name_temp = UCLA_traits.loc[:,0]
 age_temp = UCLA_traits.loc[:,3]
@@ -69,7 +66,6 @@ weights = []
 heteros = []
 FOHs = []
 wolves_ages = []
-
 
 for i in range(len(name_temp)):
     names.append(name_temp[i])
@@ -92,50 +88,38 @@ heteros = np.array(heteros)
 FOHs = np.array(FOHs)
 wolves_ages = np.array(wolves_ages)
 
-print(pred_ages_temp)
-
+#### Keep information on samples that are part of triplicates
 triplicates = [[25,26,54],[27,28,55],[29,30,56],[31,32,57],\
                [33,34,58],[35,36,59],[37,38,60],[39,40,61],\
                [41,42,62],[43,44,63],[45,46,64],[47,48,65],\
                [49,50,66],[52,53,146]]
 
-triplicates
 
+#### If coverage data provided:
 # coverages = pd.read_csv("dog_counts_217.csv", header=None)
 # coverages_short = coverages[91:]
 # coverages_short = coverages_short.drop(columns = 0)
 # coverages_short = coverages_short.to_numpy()
 
-# print("Coverages: \n", coverages_short.shape)
-# print(coverages_short)
-
-# print("Keep: \n", keep.shape)
-# print(keep)
-
 # coverages_short_keep = coverages_short[:,keep]
-# print(coverages_short_keep.shape)
-# print(coverages_short_keep)
 
 # coverages_mean = coverages_short_keep.mean(axis = 0)
-# print("Means: \n", coverages_mean)
 
+#### Parser function to select only proteins in the top percentile of counts
 def parser(coverage_means, quantile):
     coverage_means_q = statistics.quantiles(coverage_means, n=quantile)[quantile-2]
     best = coverage_means > coverage_means_q
     return best
 
 # best = parser(coverages_mean, 3)
-# print(best)
 
 methylation = UCLA_CG_table.to_numpy()
 IDs = methylation[:,0]
 methylation = np.delete(methylation, 0, 1)
 # methylation = methylation[:,best]
 
-print(methylation.shape)
-print(methylation)
-
-"""## LARS Prediction"""
+########################################
+#### LARS Prediction
 
 def get_predictions(X_train, Y_train):
     loo = LeaveOneOut()
@@ -144,7 +128,6 @@ def get_predictions(X_train, Y_train):
     for train_index, test_index in loo.split(X_train):
         X_retrain, X_retest = X_train[train_index], X_train[test_index]
         
-        # MODIFY X_retrain and Y_retrain
         IDcheck = np.ones(len(IDs))
         dupIDs = IDs
         for i in range(len(IDcheck)):
@@ -164,13 +147,11 @@ def get_predictions(X_train, Y_train):
     
     return predicted_ages
 
-#Try lassolarsCV
-
-print(ages)
-
+#### Try predicting either ages or sqrt-transformed ages
 # lars_predict = get_predictions(methylation, ages)
 lars_predict_sqrt = get_predictions(methylation, np.sqrt(ages))
 
+#### Functions to calculate prediction quality
 def get_median_abs_error(prediction, actual):
     errors = []
     for i in range(len(prediction)):
@@ -185,6 +166,7 @@ def get_r_value(predicted_ages_list, actual_ages_list):
 def get_r_squared(predicted_ages_list, actual_ages_list):
     return (get_r_value(predicted_ages_list, actual_ages_list)**2)
 
+#### Plot predictions
 def plot_predictions(predicted_ages_list, actual_ages_list):
     plt.plot(actual_ages_list, predicted_ages_list, 'ko')
     plt.ylabel("Predicted Age")
@@ -200,9 +182,29 @@ def plot_predictions(predicted_ages_list, actual_ages_list):
     print("Median Absolute Error: ", get_median_abs_error(predicted_ages_list, actual_ages_list))
 
 plot_predictions(np.square(lars_predict_sqrt), ages)
-# Predict square root of age
 
-list(lars_predict)
+
+####################################
+#### Predict wolves (i.e. test set) using LARS model
+
+wolves_methylation = Wolves_CG_table
+
+wolves_predict = LassoLars(alpha = 0.02)
+wolves_predict.fit(methylation, ages)
+predictions = wolves_predict.predict(wolves_methylation)
+
+plt.plot(wolves_ages, predictions, 'ko')
+plt.plot(wolves_ages, wolves_ages, 'r--')
+plt.title('Predicting Wolves Using Lasso LARS Model')
+plt.xlabel('Actual Age')
+plt.ylabel('Predicted Age')
+plt.savefig('Wolves_predictions.png', dpi=300)
+
+print("R squared: ", get_r_squared(predictions, wolves_ages))
+print("R value: ", get_r_value(predictions, wolves_ages))
+print("Median Absolute Error: ", get_median_abs_error(predictions, wolves_ages))
+#############################
+#### Show boxplot of predicted ages by triplicates
 
 triplicate_ranges = {1:[], 2:[], 3:[], 4:[], 5:[], 6:[], 7:[],\
                      8:[], 9:[], 10:[], 11:[], 12:[], 13:[]}
@@ -227,9 +229,9 @@ for x in triplicate_ranges:
 triplicate_range_for_median = np.array(triplicate_range_for_median)
 print("Median of Standard Deviation for Triplicates:", statistics.median(triplicate_range_for_median))
 
-list(lars_predict)
 
-"""## Pacemaker Prediction"""
+###############################
+#### Different approach: Epigenetic Pacemaker Prediction
 
 from EpigeneticPacemaker.EpigeneticPacemaker import EpigeneticPacemaker
 
@@ -245,23 +247,17 @@ def pearson_correlation(meth_matrix: np.array, phenotype: np.array) -> np.array:
 
     # calculate covariance
     covariance = np.sum(transformed_matrix * transformed_phenotype, axis=1)
-#     print("Covariance shape: ", covariance.shape, "\n", covariance)
     sums = np.sum(transformed_matrix ** 2, axis=1)
     variance_meth = []
     for i in sums:
         variance_meth.append(np.sqrt(i))
     variance_meth = np.array(variance_meth)
-#     variance_meth = np.sqrt(np.sum(transformed_matrix ** 2, axis=1))
-#     print("Variance meth shape: ", variance_meth.shape, "\n", variance_meth)
     variance_phenotype = np.sqrt(np.sum(transformed_phenotype ** 2))
-#     print("Variance pheno shape: ", variance_phenotype.shape, "\n", variance_phenotype)
 
     return covariance / (variance_meth * variance_phenotype)
 
 # get the absolute value of the correlation coefficient
 abs_pcc_coefficients = abs(pearson_correlation(methylation, ages))
-
-# print("Abs Pearson: ", abs_pcc_coefficients)
 
 # return list of site indices with a high absolute correlation coefficient
 training_sites = np.where(abs_pcc_coefficients > .6)[0]
@@ -272,6 +268,7 @@ from matplotlib import rc
 from scipy import optimize
 import scipy.stats as stats
 
+#### Plot graph for pacemaker prediction using 3 different functions (square root, linear, log)
 def plot_known_predicted_ages(known_ages, predicted_ages, label=None):
     # define optimization function
     def func(x, a, b, c):
@@ -310,32 +307,7 @@ def plot_known_predicted_ages(known_ages, predicted_ages, label=None):
     ax.set_ylabel('Epigenetic State', fontsize=16)
     ax.tick_params(axis='both', which='major', labelsize=16)
     ax.legend(fontsize=16)
-#     plt.savefig('Epi_pacemaker.png', dpi=300)
     plt.show()
-    
-# def plot_known_predicted_ages(known_ages, predicted_ages, label=None):
-#     # define optimization function
-#     def func_3(x, a, b, c):
-#         return a * np.log(np.asarray(x)) + c
-#     # fit trend line
-#     popt, pcov = optimize.curve_fit(func_3, [1 + x for x in known_ages], predicted_ages)
-#     # get r squared
-#     rsquared = r2(predicted_ages, func_3([1 + x for x in known_ages], *popt))
-#     # format plot label
-#     plot_label = f'$f(x)={popt[0]:.2f}ln(x) {popt[2]:.2f}, R^{{2}}={rsquared:.2f}$'
-#     # initialize plt plot
-#     fig, ax = plt.subplots(figsize=(12,12))
-#     # plot trend line
-#     ax.plot(sorted(known_ages), func_3(sorted([1 + x for x in known_ages]), *popt), 'g--', label=plot_label)
-#     # scatter plot
-#     ax.scatter(known_ages, predicted_ages, marker='o', alpha=0.8, color='k')
-#     ax.set_title(label, fontsize=18)
-#     ax.set_xlabel('Chronological Age', fontsize=16)
-#     ax.set_ylabel('Epigenetic State', fontsize=16)
-#     ax.tick_params(axis='both', which='major', labelsize=16)
-#     ax.legend(fontsize=16)
-#     plt.savefig('Epi_pacemaker.png')
-#     plt.show()
     
 # use latex formatting for plots
 rc('text', usetex=False)
@@ -361,7 +333,9 @@ plot_known_predicted_ages(ages, pacemaker_state_predict, 'Epigenetic Pacemaker')
 # Predict square root of age
 # Put in table - both predictions + actual
 
-"""## Significance Tests"""
+
+####################################
+#### Testing for Moderation and Interaction 
 
 import statsmodels.api as sm
 
@@ -417,12 +391,9 @@ age_weights = ages * weights_int
 stack = np.stack((ages, age_weights), axis = 1)
 
 # Instead of age-squared, use square root of age
-
 stack_df = pd.DataFrame(stack, columns = ['Age', 'Age*Weight'])
 
-print(stack_df)
-
-"""**Lars Predictions**"""
+#### Generate plots for moderation analysis
 
 lars_sqrt_model = sm.OLS(lars_predict, stack_df)
 lars_sqrt_fit = lars_sqrt_model.fit()
@@ -448,10 +419,6 @@ plt.axis('off')
 plt.tight_layout()
 plt.savefig('Lars_Statsmodels_no_sqrt.png')
 
-# Put this in docs (export figure), and fix the labeling
-
-"""**Pacemaker Predictions**"""
-
 pacemaker_model = sm.OLS(pacemaker_state_predict, stack_df)
 pacemaker_fit = pacemaker_model.fit()
 pacemaker_fit.summary()
@@ -462,24 +429,3 @@ plt.text(0.01, 0.05, str(pacemaker_fit.summary()), {'fontsize': 10}, fontpropert
 plt.axis('off')
 plt.tight_layout()
 plt.savefig('Pacemaker_Statsmodels.png')
-
-"""## Predicting Wolves"""
-
-wolves_methylation = Wolves_CG_table
-
-wolves_predict = LassoLars(alpha = 0.02)
-wolves_predict.fit(methylation, ages)
-predictions = wolves_predict.predict(wolves_methylation)
-
-plt.plot(wolves_ages, predictions, 'ko')
-plt.plot(wolves_ages, wolves_ages, 'r--')
-plt.title('Predicting Wolves Using Lasso LARS Model')
-plt.xlabel('Actual Age')
-plt.ylabel('Predicted Age')
-plt.savefig('Wolves_predictions.png', dpi=300)
-
-print("R squared: ", get_r_squared(predictions, wolves_ages))
-print("R value: ", get_r_value(predictions, wolves_ages))
-print("Median Absolute Error: ", get_median_abs_error(predictions, wolves_ages))
-
-# Look for the triplicates. For each one, find the range of age predictions (min to max)
