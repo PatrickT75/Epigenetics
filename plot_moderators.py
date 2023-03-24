@@ -7,6 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/15otr6w3DnQDDE5aTa-AU1ohkVQYaRWqM
 """
 
+#### Visualize all moderators and interactors of buccal sub-group in one plot using matplotlib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -31,11 +32,7 @@ meta_cleaned = meta[~meta.isnull().any(axis=1)]
 
 meta_cleaned = meta_cleaned.drop(columns=['prosperID', 'inaugural_barcode'], axis=1)
 
-meta_cleaned
-
 buccal_cleaned = buccal[~meta.isnull().any(axis=1).to_numpy()]
-
-buccal_cleaned
 
 ages = buccal_cleaned['age']
 
@@ -62,8 +59,6 @@ for column in meta_cleaned:
     interactors_fdr = fdrcorrection(fit.pvalues[2])
     interactors_p.append(fit.pvalues[2])
     interactors_f.append(interactors_fdr[1][0])
-
-moderators_p
 
 interactors_pstars = []
 interactors_count = 0
@@ -127,4 +122,3 @@ axbuc.set_xticks(index + 0.35/2)
 axbuc.set_xticklabels(X_mix, rotation=90)
 
 axbuc.legend()
-
