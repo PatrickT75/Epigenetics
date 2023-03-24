@@ -22,14 +22,9 @@ from sklearn.linear_model import LogisticRegressionCV
 import seaborn as sns
 
 CG_table = pd.read_csv('human_meth_cleaned.csv')
-
-CG_table
-
 human_table = pd.read_csv('MetadataHuman2021_554.csv')
 
-human_table
-
-# Clean methylation table
+#### Clean methylation table
 
 CG_table_drop = CG_table.drop(['Chromosome', 'Start', 'Stop'],axis=1)
 CG_table_drop = CG_table_drop.dropna(axis = 'rows')
@@ -38,14 +33,14 @@ CG_table_drop = np.transpose(CG_table_drop)
 print(CG_table_drop)
 print(CG_table_drop.shape)
 
-# Extract ages and genders
+#### Extract ages and genders
 ages = human_table['age']
 genders = human_table['gender']
 
 ages = ages.to_numpy()
 print(ages.shape)
 
-"""**Epigenetic Age**"""
+#### Function for age prediction
 
 def get_lars_age_predictions(X_train, Y_train):
     loo = LeaveOneOut()
@@ -60,6 +55,7 @@ def get_lars_age_predictions(X_train, Y_train):
     
     return predicted_ages
 
+#### Functions for prediction quality assessment
 def get_median_abs_error(prediction, actual):
     errors = []
     for i in range(len(prediction)):
@@ -92,6 +88,8 @@ methylation = CG_table_drop
 lars_predict = get_lars_age_predictions(methylation, ages)
 
 plot_predictions(lars_predict, ages)
+
+#### Try other machine learning models
 
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.cross_decomposition import PLSCanonical
